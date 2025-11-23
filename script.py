@@ -3,9 +3,9 @@
 leetcode_daily.py
 
 Fetch today's LeetCode daily problem and post to a Telegram chat.
-Ready for cloud deployment:
+Cloud‑ready version:
  - Uses environment variables for secrets
- - Avoids reliance on local state file persistence
+ - Escapes unsafe HTML so Telegram accepts the message
  - Dependencies listed in requirements.txt
 """
 
@@ -13,6 +13,7 @@ import os
 import sys
 import time
 import logging
+import html
 from typing import Optional, Dict, Any
 import requests
 from bs4 import BeautifulSoup
@@ -51,10 +52,11 @@ logging.basicConfig(
 )
 
 
-def clean_html(html: str) -> str:
-    """Convert HTML to plain text and limit length."""
-    soup = BeautifulSoup(html or "", "html.parser")
+def clean_html(html_content: str) -> str:
+    """Convert HTML to plain text, escape unsafe chars, and limit length."""
+    soup = BeautifulSoup(html_content or "", "html.parser")
     text = soup.get_text(" ", strip=True)
+    text = html.escape(text)  # escape <, >, & so Telegram won't misinterpret
     return text[:700] + "..." if len(text) > 700 else text
 
 
@@ -67,7 +69,7 @@ def send_telegram(text: str) -> requests.Response:
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": text,
-        "parse_mode": "HTML",
+        "parse_mode": "HTML",  # safe because we escape snippet
         "disable_web_page_preview": False,
     }
 
