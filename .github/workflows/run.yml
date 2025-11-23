@@ -20,13 +20,5 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run script
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python script.py
         
-      - name: Debug env
-        run: echo "Token is $TELEGRAM_BOT_TOKEN and Chat ID is $TELEGRAM_CHAT_ID"
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
