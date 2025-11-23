@@ -40,8 +40,8 @@ RETRY_DELAY = 2  # seconds
 REQUEST_TIMEOUT = 10  # seconds
 
 # --- TELEGRAM CREDENTIALS (from environment variables) ---
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+TELEGRAM_BOT_TOKEN = "8282381882:AAH-IJLyk0OOHIZhS7ph-3S9-3kgQZZoBBw"
+TELEGRAM_CHAT_ID = 85585557529285752928
 
 # Basic logging
 logging.basicConfig(
