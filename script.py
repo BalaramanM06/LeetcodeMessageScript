@@ -7,12 +7,7 @@ Fetch today's LeetCode daily problem and post to one or more Telegram chats.
 SECURE USAGE:
  - Set TELEGRAM_RECIPIENTS as an environment variable containing a single
    comma-separated list of BOT_TOKEN:CHAT_ID entries, e.g.:
-     TELEGRAM_RECIPIENTS="828238...:8555752928,828601...:6398158417"
-
- - In GitHub Actions, store that string as a repository secret named
-   TELEGRAM_RECIPIENTS and supply it to the job/step via env:
-     env:
-       TELEGRAM_RECIPIENTS: ${{ secrets.TELEGRAM_RECIPIENTS }}
+     TELEGRAM_RECIPIENTS="828238...:AAH-...:8555752928,828601...:AAGd...:6398158417"
 
 This script intentionally has no hard-coded tokens.
 """
@@ -53,27 +48,37 @@ REQUEST_TIMEOUT = 10  # seconds
 # ---------------------------
 
 def load_recipients_from_env() -> List[Tuple[str, str]]:
-    """Parse TELEGRAM_RECIPIENTS env var into a list of (token, chat_id)."""
+    """
+    Parse TELEGRAM_RECIPIENTS env var into a list of (token, chat_id).
+
+    IMPORTANT: split on the LAST colon so tokens that already contain a ':'
+    (like Telegram tokens of the form "<botid>:<token>") are preserved.
+    """
     raw = os.environ.get("TELEGRAM_RECIPIENTS", "").strip()
     if not raw:
         return []
-    pairs: List[Tuple[str, str]] = []
+
+    # Remove accidental surrounding quotes (common when copying secrets)
+    if (raw.startswith('"') and raw.endswith('"')) or (raw.startswith("'") and raw.endswith("'")):
+        raw = raw[1:-1].strip()
+
+    entries = []
     for part in raw.split(","):
         part = part.strip()
         if not part:
             continue
-        # split only on the first colon (token:chat). token normally doesn't contain colons.
+        # Use rsplit to keep any colons that belong to the token itself.
         if ":" not in part:
             logging.warning("Skipping invalid recipient entry (no colon found): %s", part)
             continue
-        token, chat = part.split(":", 1)
+        token, chat = part.rsplit(":", 1)  # split on last colon
         token = token.strip()
         chat = chat.strip()
-        if token and chat:
-            pairs.append((token, chat))
-        else:
-            logging.warning("Skipping invalid recipient entry (empty token/chat): %s", part)
-    return pairs
+        if not token or not chat:
+            logging.warning("Skipping invalid recipient entry (empty token or chat): %s", part)
+            continue
+        entries.append((token, chat))
+    return entries
 
 RECIPIENTS = load_recipients_from_env()
 
@@ -111,7 +116,7 @@ def send_telegram_single(bot_token: str, chat_id: str, text: str) -> Dict[str, A
         j = resp.json()
     except Exception as e:
         logging.exception(
-            "Failed to send Telegram message to chat_id=%s (bot_token first 8 chars=%s): %s",
+            "Failed to send Telegram message to chat_id=%s (bot_token head=%s): %s",
             chat_id,
             bot_token[:8] if bot_token else "?",
             e,
