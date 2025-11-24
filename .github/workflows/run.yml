@@ -2,23 +2,27 @@ name: Run Python Script
 
 on:
   schedule:
-    - cron: "0 6 * * *"   # every day at 2 AM UTC
-  workflow_dispatch:       # allows manual run
+    - cron: "0 6 * * *"   # runs every day at 6 AM UTC
+  workflow_dispatch:
 
 jobs:
   run-script:
     runs-on: ubuntu-latest
+    env:
+      TELEGRAM_RECIPIENTS: ${{ secrets.TELEGRAM_RECIPIENTS }}
+
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: "3.10"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
 
       - name: Run script
-        run: python script.py
-        
+        run: |
+          python3 script.py
