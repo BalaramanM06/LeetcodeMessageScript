@@ -4,18 +4,17 @@ leetcode_daily.py
 
 Fetch today's LeetCode daily problem and post to one or more Telegram chats.
 
-This version:
- - Escapes unsafe HTML so Telegram accepts the message
- - Sends the message to multiple recipients (either hardcoded below or from the
-   TELEGRAM_RECIPIENTS env var).
- - If TELEGRAM_RECIPIENTS is set, it overrides the hardcoded list.
-
-RECIPIENT formats:
- - Env var TELEGRAM_RECIPIENTS (optional): comma-separated entries of
-   BOT_TOKEN:CHAT_ID
-   Example:
+SECURE USAGE:
+ - Set TELEGRAM_RECIPIENTS as an environment variable containing a single
+   comma-separated list of BOT_TOKEN:CHAT_ID entries, e.g.:
      TELEGRAM_RECIPIENTS="828238...:8555752928,828601...:6398158417"
- - If env var not set, this script will fallback to the hardcoded RECIPIENTS list.
+
+ - In GitHub Actions, store that string as a repository secret named
+   TELEGRAM_RECIPIENTS and supply it to the job/step via env:
+     env:
+       TELEGRAM_RECIPIENTS: ${{ secrets.TELEGRAM_RECIPIENTS }}
+
+This script intentionally has no hard-coded tokens.
 """
 import os
 import sys
@@ -49,30 +48,21 @@ RETRY_DELAY = 2  # seconds
 REQUEST_TIMEOUT = 10  # seconds
 
 # ---------------------------
-# RECIPIENTS: override using the TELEGRAM_RECIPIENTS env var (recommended)
-# Format for env var: BOT_TOKEN:CHAT_ID,BOT_TOKEN2:CHAT_ID2
-#
-# If env var not provided, the script falls back to the hardcoded list below.
-# NOTE: Hardcoding tokens in files is insecure. Use secrets instead.
+# Recipients: load from env (no fallback tokens here)
+# Format: BOT_TOKEN:CHAT_ID,BOT_TOKEN2:CHAT_ID2
 # ---------------------------
-
-# HARD-CODED FALLBACK (as you provided). Insecure if committed to a repo.
-RECIPIENTS_FALLBACK: List[Tuple[str, str]] = [
-    ("8282381882:AAH-IJLyk0OOHIZhS7ph-3S9-3kgQZZoBBw", "8555752928"),
-    ("8286012641:AAGdzxUT9facwORw3HSJBy9fH4SbKbZlGok", "6398158417"),
-]
 
 def load_recipients_from_env() -> List[Tuple[str, str]]:
     """Parse TELEGRAM_RECIPIENTS env var into a list of (token, chat_id)."""
     raw = os.environ.get("TELEGRAM_RECIPIENTS", "").strip()
     if not raw:
         return []
-    pairs = []
+    pairs: List[Tuple[str, str]] = []
     for part in raw.split(","):
         part = part.strip()
         if not part:
             continue
-        # split only on the last colon in case token contains colons (it doesn't normally)
+        # split only on the first colon (token:chat). token normally doesn't contain colons.
         if ":" not in part:
             logging.warning("Skipping invalid recipient entry (no colon found): %s", part)
             continue
@@ -85,8 +75,7 @@ def load_recipients_from_env() -> List[Tuple[str, str]]:
             logging.warning("Skipping invalid recipient entry (empty token/chat): %s", part)
     return pairs
 
-# Final recipients (env overrides fallback)
-RECIPIENTS = load_recipients_from_env() or RECIPIENTS_FALLBACK
+RECIPIENTS = load_recipients_from_env()
 
 # Basic logging
 logging.basicConfig(
@@ -95,9 +84,11 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
-if RECIPIENTS == RECIPIENTS_FALLBACK:
-    logging.warning("Using hardcoded TELEGRAM tokens/chat IDs from RECIPIENTS_FALLBACK. "
-                    "This is insecure for public repos. Prefer TELEGRAM_RECIPIENTS env var or GitHub secrets.")
+if not RECIPIENTS:
+    logging.error(
+        "No TELEGRAM recipients configured. Set the TELEGRAM_RECIPIENTS environment variable "
+        "to a comma-separated list of BOT_TOKEN:CHAT_ID entries (store it as a GitHub Actions secret)."
+    )
 
 def clean_html(html_content: str) -> str:
     """Convert HTML to plain text, escape unsafe chars, and limit length."""
@@ -119,8 +110,12 @@ def send_telegram_single(bot_token: str, chat_id: str, text: str) -> Dict[str, A
         resp = requests.post(url, json=payload, timeout=REQUEST_TIMEOUT)
         j = resp.json()
     except Exception as e:
-        logging.exception("Failed to send Telegram message to chat_id=%s (bot_token first 8 chars=%s): %s",
-                          chat_id, bot_token[:8] if bot_token else "?", e)
+        logging.exception(
+            "Failed to send Telegram message to chat_id=%s (bot_token first 8 chars=%s): %s",
+            chat_id,
+            bot_token[:8] if bot_token else "?",
+            e,
+        )
         return {"ok": False, "error": str(e)}
     return j
 
@@ -184,7 +179,8 @@ def build_message(today: Dict[str, Any]) -> str:
 
 def main():
     if not RECIPIENTS:
-        logging.error("No TELEGRAM recipients configured. Set TELEGRAM_RECIPIENTS env var or update RECIPIENTS_FALLBACK.")
+        # already logged earlier; exit with non-zero to fail CI so you notice the missing secret
+        logging.error("Exiting because TELEGRAM_RECIPIENTS is not configured.")
         sys.exit(1)
 
     logging.info("Fetching today's LeetCode challenge...")
@@ -194,7 +190,7 @@ def main():
 
     errors = []
     for bot_token, chat_id in RECIPIENTS:
-        logging.info("Sending to chat_id=%s (bot token starts with %s)", chat_id, bot_token[:8] if bot_token else "?")
+        logging.info("Sending to chat_id=%s (bot token head=%s)", chat_id, bot_token[:8] if bot_token else "?")
         result = send_telegram_single(bot_token, chat_id, message)
         if not result.get("ok"):
             errors.append({"bot_token_head": bot_token[:8], "chat_id": chat_id, "response": result})
@@ -205,6 +201,7 @@ def main():
     if errors:
         logging.error("Some sends failed. See logs above for details.")
         sys.exit(2)
+
     logging.info("All messages sent successfully.")
     sys.exit(0)
 
